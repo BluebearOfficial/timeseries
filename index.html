@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>时间序列</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 20px; }
+    canvas { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>时间序列探索</h1>
+
+  <div>
+    <button onclick="load('temperature')">温度</button>
+    <button onclick="load('steps')">步数</button>
+    <button onclick="load('activity')">活动</button>
+  </div>
+
+  <div id="stats"></div>
+  <canvas id="chart"></canvas>
+
+  <script>
+    let chart = null;
+
+    async function load(type) {
+  const statsRes = await fetch(`http://localhost:3000/api/stats/${type}`);
+  const stats = await statsRes.json();
+  document.getElementById('stats').innerText =
+    `${type}：共 ${stats.stats.count} 条，` +
+    `平均 ${stats.stats.avg.toFixed(2)}，` +
+    `最高 ${stats.stats.max}，最低 ${stats.stats.min}，` +
+    `范围 ${stats.stats.firstDate} ~ ${stats.stats.lastDate}`;
+
+  const yearRes = await fetch(`http://localhost:3000/api/yearly/${type}`);
+  const yearly = await yearRes.json();
+
+  // ← 加这一行：过滤掉不完整的年份
+  const data = yearly.data.filter(x => x.count >= 300);
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels: data.map(x => x.year),        // ← 改成 data
+      datasets: [
+        {
+          label: '年平均',
+          data: data.map(x => x.avg),       // ← 改成 data
+          borderColor: 'red',
+          tension: 0.2,
+        },
+        {
+          label: '年最高',
+          data: data.map(x => x.max),       // ← 改成 data
+          borderColor: 'orange',
+          tension: 0.2,
+        },
+        {
+          label: '年最低',
+          data: data.map(x => x.min),       // ← 改成 data
+          borderColor: 'blue',
+          tension: 0.2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: type + ' 年度趋势' },
+      },
+    },
+  });
+}
+
+    load('temperature');
+  </script>
+</body>
+</html>
