@@ -7,40 +7,66 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>时间序列探索</h1>
+<h1>时间序列探索</h1>
 
-  <div>
-    <button onclick="load('temperature')">温度</button>
-    <button onclick="load('steps')">步数</button>
-    <button onclick="load('activity')">活动</button>
-    <button onclick="loadCumulative()">累积平均</button>
-    <button onclick="loadPeak()">峰值月</button>
-    <button onclick="loadMonthTrend()">某月趋势</button>
-    <button onclick="loadDaily()">某月每日</button>
-    <button onclick="loadHotDays()">酷暑天数</button>
-    <button onclick="loadCompare()">活动 vs 步数</button>
+<div class="group">
+  <span class="group-title">基础</span>
+  <button onclick="load('temperature')">温度</button>
+  <button onclick="load('steps')">步数</button>
+  <button onclick="load('activity')">活动</button>
+</div>
 
-<button onclick="loadWeekday()">星期分布</button>
+<div class="group">
+  <span class="group-title">趋势</span>
+  <button onclick="loadCumulative()">累积平均</button>
+  <button onclick="loadPeak()">峰值月</button>
+  <button onclick="loadMovingAvg()">滑动平均</button>
+  <button onclick="loadSeason()">季节天数</button>
+</div>
 
-<button onclick="loadMonthDist()">月度分布</button>
-<button onclick="loadMovingAvg()">滑动平均</button>
+<div class="group">
+  <span class="group-title">分布</span>
+  <button onclick="loadWeekday()">星期分布</button>
+  <button onclick="loadMonthDist()">月度分布</button>
+  <button onclick="loadHotDays()">大幅偏高天数</button>
+</div>
 
-<button onclick="loadCorrelation()">相关性</button>
-<button onclick="loadStepsByTemp()">温度 vs 步数</button>
+<div class="group">
+  <span class="group-title">对比</span>
+  <button onclick="loadCompare()">活动 vs 步数</button>
+  <button onclick="loadStepsByTemp()">温度 vs 步数</button>
+  <button onclick="loadActivityByTemp()">温度 vs 活动</button>
+  <button onclick="loadCorrelation()">相关性</button>
+</div>
 
-<button onclick="loadActivityByTemp()">温度 vs 活动</button>
-<button onclick="loadSeason()">季节天数</button>
-
-<button onclick="exportLast()">导出当前图</button>
-
-<button onclick="loadTop()">排行榜</button>
-<div id="topResult"></div>
-
-<div>
+<div class="group">
+  <span class="group-title">单点</span>
+  <button onclick="loadMonthTrend()">某月趋势</button>
+  <button onclick="loadDaily()">某月每日</button>
+  <button onclick="loadTop()">排行榜</button>
   <input id="dayInput" type="date" />
   <button onclick="loadDay()">查询</button>
+  <div id="dayResult"></div>
+  <div id="topResult"></div>
 </div>
-<div id="dayResult"></div>
+
+<div class="group">
+  <span class="group-title">工具</span>
+  <button onclick="exportLast()">导出当前图</button>
+</div>
+
+<div class="group">
+  <span class="group-title">上传</span>
+  <select id="uploadType">
+    <option value="temperature">温度</option>
+    <option value="steps">步数</option>
+    <option value="activity">活动</option>
+   
+  </select>
+  <input type="file" id="uploadFile" accept=".xlsx,.xls" />
+  <button onclick="uploadExcel()">上传</button>
+  <span id="uploadResult"></span>
+</div>
 
 <canvas id="seasonChart"></canvas>
 <canvas id="abtChart"></canvas>
@@ -50,7 +76,7 @@
 
 
 <canvas id="maChart"></canvas>
-<button onclick="exportCanvas('maChart')">导出这张</button>
+
 
 <canvas id="monthDistChart"></canvas>
 

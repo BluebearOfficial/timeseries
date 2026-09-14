@@ -203,7 +203,7 @@ let hotChart = null;
 async function loadHotDays() {
   const month = prompt('月份：', '9');
   if (!month) return;
-  const threshold = prompt('日均温 ≥ 多少度算酷暑？', '30');
+  const threshold = prompt('日均温 ≥ 多少度算大幅偏高？', '30');
   if (!threshold) return;
 
   const r = await fetch(`http://localhost:3000/api/hot-days/temperature/${month}/${threshold}`);
@@ -226,7 +226,7 @@ async function loadHotDays() {
     },
     options: {
       plugins: {
-        title: { display: true, text: `${month}月酷暑天数逐年变化（日均温≥${threshold}°C）` },
+        title: { display: true, text: `${month}月大幅偏高天数逐年变化（日均温≥${threshold}°C）` },
       },
       scales: {
         y: { beginAtZero: true },    // ← Y 轴从 0 开始
@@ -607,6 +607,33 @@ function exportCanvas(id) {
   link.click();
 }
 
+async function uploadExcel() {
+  const type = document.getElementById('uploadType').value;
+  const fileInput = document.getElementById('uploadFile');
+  const file = fileInput.files[0];
 
+  if (!file) {
+    alert('请先选文件');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  document.getElementById('uploadResult').innerText = '上传中…';
+
+  const r = await fetch(`http://localhost:3000/api/upload/${type}`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const d = await r.json();
+
+  if (d.ok) {
+    document.getElementById('uploadResult').innerText = `成功导入 ${d.count} 条`;
+  } else {
+    document.getElementById('uploadResult').innerText = '失败：' + d.msg;
+  }
+}
 
     load('temperature');

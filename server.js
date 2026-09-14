@@ -428,6 +428,54 @@ app.get('/api/season-all', (req, res) => {
   res.json({ ok: true, data });
 });
 
+const multer = require('multer');
+const XLSX = require('xlsx');
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post('/api/upload/:type', upload.single('file'), (req, res) => {
+  const type = req.params.type;
+
+  if (!req.file) {
+    return res.json({ ok: false, msg: '没有文件' });
+  }
+
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    const insert = db.prepare(`
+      INSERT OR REPLACE INTO records (date, type, value)
+      VALUES (?, ?, ?)
+    `);
+
+    let count = 0;
+    const insertMany = db.transaction((rows) => {
+      for (const row of rows) {
+        if (!row.date || row.value === undefined) continue;
+
+        let dateStr;
+        if (typeof row.date === 'number') {
+          const utcDays = row.date - 25569;
+          const date = new Date(utcDays * 86400 * 1000);
+          dateStr = date.toISOString().slice(0, 10);
+        } else {
+          dateStr = String(row.date).trim();
+        }
+
+        insert.run(dateStr, type, Number(row.value));
+        count++;
+      }
+    });
+
+    insertMany(rows);
+
+    res.json({ ok: true, type, count });
+  } catch (e) {
+    res.json({ ok: false, msg: e.message });
+  }
+});
+
 app.listen(3000, () => {
   console.log('时间序列后端跑起来了：http://localhost:3000');
 });
