@@ -408,6 +408,26 @@ app.get('/api/activity-by-temp', (req, res) => {
   res.json({ ok: true, data: rows });
 });
 
+app.get('/api/season-all', (req, res) => {
+  const summer = Number(req.query.summer) || 25;
+  const winter = Number(req.query.winter) || 12;
+
+  const rows = db.prepare(`
+    SELECT
+      substr(date, 1, 4) AS year,
+      SUM(CASE WHEN value >= ? THEN 1 ELSE 0 END) AS summer,
+      SUM(CASE WHEN value < ? THEN 1 ELSE 0 END) AS winter,
+      COUNT(*) AS total
+    FROM records
+    WHERE type = 'temperature'
+    GROUP BY year
+    ORDER BY year
+  `).all(summer, winter);
+
+  const data = rows.filter(r => r.total >= 300);
+  res.json({ ok: true, data });
+});
+
 app.listen(3000, () => {
   console.log('时间序列后端跑起来了：http://localhost:3000');
 });
