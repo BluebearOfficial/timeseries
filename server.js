@@ -476,6 +476,219 @@ app.post('/api/upload/:type', upload.single('file'), (req, res) => {
   }
 });
 
+
+app.get('/api/calendar/:type', (req, res) => {
+  const type = req.params.type;
+
+  const rows = db.prepare(`
+    SELECT 
+      substr(date, 6, 5) AS month_day,
+      COUNT(*) AS total,
+      SUM(CASE WHEN value > 0 THEN 1 ELSE 0 END) AS hits,
+      MAX(value) AS max_val,
+      MIN(value) AS min_val
+    FROM records
+    WHERE type = ?
+    GROUP BY month_day
+  `).all(type);
+
+  const result = rows.map(r => {
+    let status = 'normal';
+    if (r.total >= 2) { 
+      if (type === 'activity') {
+        if (r.hits === 0) status = 'never';          
+        if (r.hits === r.total) status = 'always';   
+      } else if (type === 'steps') {
+        // 步数判定：这几年里最高都没过 5000 -> 必宅；最低都超过 10000 -> 必走
+        if (r.max_val < 5000) status = 'never';
+        if (r.min_val > 10000) status = 'always';
+      }
+    }
+    return { date: r.month_day, status };
+  });
+
+  res.json({ ok: true, data: result });
+});
+
+
+// ===== 滑动克制度（天数/次数） =====
+app.get('/api/sliding-gap/:type/:window/:year', (req, res) => {
+  const type = req.params.type;
+  const windowSize = Number(req.params.window);
+  const year = req.params.year;
+
+  // 获取该年份的数据（按日期排序）
+  const rows = db.prepare(`
+    SELECT date, value
+    FROM records
+    WHERE type = ? AND substr(date, 1, 4) = ?
+    ORDER BY date
+  `).all(type, year);
+
+  const result = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    if (i < windowSize - 1) continue; // 前 29 天不够算
+
+    let count = 0;
+    // 统计过去 windowSize 天的总次数
+    for (let j = i - windowSize + 1; j <= i; j++) {
+      count += rows[j].value;
+    }
+
+    // 你的新算法：克制度 = 窗口天数 / 次数
+    // 如果次数为 0，直接封顶到 60
+    let gap = count > 0 ? (windowSize / count) : 60;
+
+    result.push({
+      date: rows[i].date,
+      gap: gap,
+      count: count
+    });
+  }
+
+  res.json({ ok: true, type, window: windowSize, year, data: result });
+});
+
+app.get('/api/streaks/:type', (req, res) => {
+  const type = req.params.type;
+
+  const rows = db.prepare(`
+    SELECT date, value
+    FROM records
+    WHERE type = ?
+    ORDER BY date
+  `).all(type);
+
+  if (rows.length === 0) return res.json({ ok: true, message: '没有数据' });
+
+  let currentStreak = 0;
+  let maxStreak = 0;
+  let maxStreakDate = '';
+  
+  let allGaps = []; // 存放所有的空窗期
+  let lastEventDate = null;
+
+  function daysBetween(d1, d2) {
+    const t1 = new Date(d1).getTime();
+    const t2 = new Date(d2).getTime();
+    return Math.round(Math.abs(t2 - t1) / (1000 * 60 * 60 * 24));
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+
+    if (row.value === 1) {
+      // 1. 统计连击
+      if (i > 0 && daysBetween(rows[i-1].date, row.date) === 1 && rows[i-1].value === 1) {
+        currentStreak++;
+      } else {
+        currentStreak = 1;
+      }
+      if (currentStreak > maxStreak) {
+        maxStreak = currentStreak;
+        maxStreakDate = row.date;
+      }
+
+      // 2. 记录这一次的空窗
+      if (lastEventDate) {
+        const gapDays = daysBetween(lastEventDate, row.date) - 1;
+        if (gapDays > 0) {
+          allGaps.push({
+            days: gapDays,
+            startDate: lastEventDate,
+            endDate: row.date
+          });
+        }
+      }
+      lastEventDate = row.date;
+    } else {
+      currentStreak = 0;
+    }
+  }
+
+  // 把所有的空窗期按天数从大到小排序，取前 10 个
+  allGaps.sort((a, b) => b.days - a.days);
+  const top10Gaps = allGaps.slice(0, 10);
+
+  res.json({
+    ok: true,
+    type,
+    maxStreak: { days: maxStreak, endDate: maxStreakDate },
+    top10Gaps
+  });
+});
+
+// ===== 步数与活动交叉分析（步数分箱看活动率） =====
+app.get('/api/activity-by-steps', (req, res) => {
+  const rows = db.prepare(`
+    SELECT
+      -- 步数分箱：每 2000 步一档
+      CAST(s.value / 2000 AS INTEGER) * 2000 AS stepBucket,
+      COUNT(*) AS totalDays,
+      SUM(a.value) AS activeDays,
+      -- 计算活动率：活动天数 / 总天数
+      ROUND(CAST(SUM(a.value) AS FLOAT) / COUNT(*), 4) AS activityRate
+    FROM records s
+    JOIN records a ON s.date = a.date
+    WHERE s.type = 'steps' AND a.type = 'activity'
+    GROUP BY stepBucket
+    ORDER BY stepBucket
+  `).all();
+
+  // 为了前端图表好看，把分箱起点（如 0）和终点（如 1999）拼成标签
+  const data = rows.map(r => ({
+    range: `${r.stepBucket} ~ ${r.stepBucket + 1999} 步`,
+    totalDays: r.totalDays,
+    activeDays: r.activeDays,
+    activityRate: r.activityRate
+  }));
+
+  res.json({ ok: true, data });
+});
+
+
+// ===== 统计每月的万步日天数 =====
+app.get('/api/monthly-wanbu', (req, res) => {
+  const rows = db.prepare(`
+    SELECT 
+      substr(date, 1, 7) AS month,
+      SUM(CASE WHEN value >= 10000 THEN 1 ELSE 0 END) AS wanbu_days,
+      COUNT(*) AS total_days
+    FROM records
+    WHERE type = 'steps'
+    GROUP BY month
+    ORDER BY month
+  `).all();
+
+  res.json({ ok: true, data: rows });
+});
+
+// ===== 统计每年有几个“活动>=10次”的月份 =====
+app.get('/api/yearly-10activity', (req, res) => {
+  const rows = db.prepare(`
+    SELECT 
+      year,
+      COUNT(*) AS months_reached_10
+    FROM (
+      SELECT 
+        substr(date, 1, 4) AS year,
+        substr(date, 1, 7) AS month,
+        SUM(value) AS monthly_total
+      FROM records
+      WHERE type = 'activity'
+      GROUP BY year, month
+      HAVING monthly_total >= 10
+    )
+    GROUP BY year
+    ORDER BY year
+  `).all();
+
+  res.json({ ok: true, data: rows });
+});
+
+
+
 app.listen(3000, () => {
   console.log('时间序列后端跑起来了：http://localhost:3000');
 });

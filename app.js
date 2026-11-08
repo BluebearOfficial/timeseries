@@ -637,3 +637,241 @@ async function uploadExcel() {
 }
 
     load('temperature');
+
+
+    async function loadCalendar(type) {
+  const r = await fetch(`http://localhost:3000/api/calendar/${type}`);
+  const d = await r.json();
+  
+  const container = document.getElementById('calendarGrid');
+  // 把原来的网格布局删掉，改成块级布局
+  container.style.display = 'flex';
+  container.style.flexWrap = 'wrap';
+  container.style.gap = '20px';
+  container.innerHTML = '';
+  
+  const dict = {};
+  d.data.forEach(item => dict[item.date] = item.status);
+
+  const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  // 为每个月创建一个区块
+  for (let m = 1; m <= 12; m++) {
+    const monthBox = document.createElement('div');
+    monthBox.innerHTML = `<div style="font-weight:bold; margin-bottom:5px; font-size:14px;">${monthNames[m-1]}</div>`;
+    
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(7, 16px)'; // 7 列，每个 16px
+    grid.style.gap = '3px';
+
+    for (let day = 1; day <= daysInMonth[m - 1]; day++) {
+      const mm = String(m).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      const key = `${mm}-${dd}`;
+      const status = dict[key] || 'normal';
+      
+      const cell = document.createElement('div');
+      cell.style.width = '16px';
+      cell.style.height = '16px';
+      cell.style.borderRadius = '3px';
+      cell.title = `${m}月${day}日`;
+      
+      if (status === 'always') cell.style.background = '#ffd700'; // 金色
+      else if (status === 'never') cell.style.background = '#dc143c'; // 红色
+      else cell.style.background = '#e0e0e0'; // 灰色
+      
+      grid.appendChild(cell);
+    }
+    monthBox.appendChild(grid);
+    container.appendChild(monthBox);
+  }
+}
+
+let gapChart = null;
+
+async function loadSlidingGap() {
+  const type = 'activity'; 
+  const win = 30; // 30天窗口
+  const year = prompt('输入年份（如 2025）：', '2025');
+  if (!year) return;
+
+  const r = await fetch(`http://localhost:3000/api/sliding-gap/${type}/${win}/${year}`);
+  const d = await r.json();
+
+  if (gapChart) gapChart.destroy();
+
+  gapChart = new Chart(document.getElementById('gapChart'), {
+    type: 'line',
+    data: {
+      labels: d.data.map(x => x.date.slice(5)), // 只显示 月-日
+      datasets: [{
+        label: '克制度（天数/次，越高越克制）',
+        data: d.data.map(x => x.gap),
+        borderColor: 'purple',
+        backgroundColor: 'rgba(128, 0, 128, 0.1)',
+        fill: true,
+        tension: 0.2,
+        pointRadius: 0, // 点太多就不画点了
+      }],
+    },
+    options: {
+      plugins: {
+        title: { display: true, text: `${year}年 滑动克制度（30天窗口，封顶60）` },
+      },
+      scales: {
+        y: { 
+          beginAtZero: true,
+          max: 65, // Y轴封顶稍微高一点点，留点空间
+          title: { display: true, text: '天数/次（越高越克制）' }
+        }
+      }
+    },
+  });
+  
+  lastCanvasId = 'gapChart'; // 方便导出图片
+}
+
+async function showStreakBoard() {
+  const r = await fetch('http://localhost:3000/api/streaks/activity');
+  const d = await r.json();
+  
+  let html = `<h3 style="margin-top:0; color:#b8860b;">🏆 最高连击：${d.maxStreak.days} 天</h3>`;
+  html += `<h3 style="margin-top:10px;">🧘‍♂️ 历史修仙 Top 10</h3>`;
+  html += `<table style="width:100%; text-align:left; border-collapse:collapse; margin-top:10px;">`;
+  html += `<tr style="background:#f0f0f0;"><th>名次</th><th>天数</th><th>起始日期</th><th>结束日期</th></tr>`;
+  
+  d.top10Gaps.forEach((g, i) => {
+    html += `<tr style="border-bottom:1px solid #ccc;">
+      <td>${i + 1}</td>
+      <td style="font-weight:bold; color:purple;">${g.days} 天</td>
+      <td>${g.startDate}</td>
+      <td>${g.endDate}</td>
+    </tr>`;
+  });
+  html += `</table>`;
+  
+  // 假设你有一个 id 为 'topResult' 的 div 用来显示结果
+  const target = document.getElementById('topResult');
+  if (target) {
+    target.innerHTML = html;
+  } else {
+    // 如果页面没这个 div，就弹窗
+    alert(`最高连击：${d.maxStreak.days}天\n最长修仙：${d.top10Gaps[0].days}天 (${d.top10Gaps[0].startDate} 到 ${d.top10Gaps[0].endDate})`);
+  }
+}
+
+let stepActivityChart = null;
+
+async function loadActivityBySteps() {
+  const r = await fetch('http://localhost:3000/api/activity-by-steps');
+  const d = await r.json();
+
+  if (stepActivityChart) stepActivityChart.destroy();
+
+  stepActivityChart = new Chart(document.getElementById('stepActivityChart'), {
+    type: 'line', // 用折线图更能体现“阈值效应”
+    data: {
+      labels: d.data.map(x => x.range),
+      datasets: [
+        {
+          label: '活动概率（活动天数 / 总天数）',
+          data: d.data.map(x => x.activityRate),
+          borderColor: 'crimson',
+          backgroundColor: 'rgba(220, 20, 60, 0.2)',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 4,
+          yAxisID: 'y', // 绑定左轴
+        },
+        {
+          label: '样本天数（柱状）',
+          data: d.data.map(x => x.totalDays),
+          type: 'bar',
+          backgroundColor: 'rgba(100, 100, 100, 0.3)',
+          yAxisID: 'y1', // 绑定右轴（因为天数可能很大，和概率 0-1 不匹配）
+        }
+      ],
+    },
+    options: {
+      plugins: {
+        title: { display: true, text: '步数区间 vs 活动概率（交叉分析）' },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 1,
+          title: { display: true, text: '活动概率 (0~1)' },
+          ticks: { callback: v => (v * 100) + '%' }
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          title: { display: true, text: '样本天数' },
+          grid: { drawOnChartArea: false } // 避免网格线重叠
+        }
+      }
+    }
+  });
+
+  lastCanvasId = 'stepActivityChart';
+}
+
+let wanbuChart = null;
+async function loadMonthlyWanbu() {
+  const r = await fetch('http://localhost:3000/api/monthly-wanbu');
+  const d = await r.json();
+
+  if (wanbuChart) wanbuChart.destroy();
+
+  wanbuChart = new Chart(document.getElementById('wanbuChart'), {
+    type: 'bar',
+    data: {
+      labels: d.data.map(x => x.month),
+      datasets: [{
+        label: '万步日天数',
+        data: d.data.map(x => x.wanbu_days),
+        backgroundColor: 'steelblue',
+      }]
+    },
+    options: {
+      plugins: {
+        title: { display: true, text: '每月万步日天数' },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+  lastCanvasId = 'wanbuChart';
+}
+
+let activity10Chart = null;
+async function loadYearly10Activity() {
+  const r = await fetch('http://localhost:3000/api/yearly-10activity');
+  const d = await r.json();
+
+  if (activity10Chart) activity10Chart.destroy();
+
+  activity10Chart = new Chart(document.getElementById('activity10Chart'), {
+    type: 'bar',
+    data: {
+      labels: d.data.map(x => x.year + '年'),
+      datasets: [{
+        label: '十啾月数量',
+        data: d.data.map(x => x.months_reached_10),
+        backgroundColor: 'crimson',
+      }]
+    },
+    options: {
+      plugins: {
+        title: { display: true, text: '每年十啾月数量' },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+  lastCanvasId = 'activity10Chart';
+}

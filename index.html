@@ -68,6 +68,37 @@
   <span id="uploadResult"></span>
 </div>
 
+<!-- 日历热力图 -->
+<div style="margin-top: 20px;">
+  <button onclick="loadCalendar('activity')">活动日历（0/1）</button>
+  <button onclick="loadCalendar('steps')">步数日历</button>
+  <div id="calendarLegend" style="margin-top: 10px; font-size: 12px; display: flex; gap: 15px;">
+    <span><span style="display:inline-block;width:12px;height:12px;background:gold;border-radius:2px;"></span> 必做/必走</span>
+    <span><span style="display:inline-block;width:12px;height:12px;background:crimson;border-radius:2px;"></span> 必不做/必宅</span>
+    <span><span style="display:inline-block;width:12px;height:12px;background:#e0e0e0;border-radius:2px;"></span> 随机波动</span>
+  </div>
+  <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 450px; margin-top: 10px;"></div>
+</div>
+<button onclick="loadMonthlyWanbu()">每月万步日</button>
+<button onclick="loadYearly10Activity()">年度十啾月</button>
+<canvas id="wanbuChart"></canvas>
+<canvas id="activity10Chart"></canvas>
+
+<!-- 按钮 -->
+<button onclick="loadSlidingGap()">滑动克制度</button>
+
+<!-- 容器 -->
+<canvas id="gapChart"></canvas>
+
+
+<button onclick="showStreakBoard()">修仙排行榜</button>
+
+<div id="topResult"></div>
+
+<button onclick="loadActivityBySteps()">📊 步数 × 活动交叉分析</button>
+
+<canvas id="stepActivityChart"></canvas>
+
 <canvas id="seasonChart"></canvas>
 <canvas id="abtChart"></canvas>
 
